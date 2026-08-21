@@ -9,7 +9,7 @@ Please see LICENSE files in the repository root for full details.
 
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import fetchMock from "@fetch-mock/vitest";
-import { ClientEvent, MatrixClient } from "matrix-js-sdk/src/matrix";
+import { ClientEvent, type IClientWellKnown, MatrixClient } from "matrix-js-sdk/src/matrix";
 
 import { SettingLevel } from "../SettingLevel";
 import FallbackIceServerController from "./FallbackIceServerController.ts";
@@ -48,7 +48,7 @@ describe("FallbackIceServerController", () => {
         MatrixClientBackedController.matrixClient = client;
         expect(controller.settingDisabled).toBeFalsy();
 
-        const wellKnown = {
+        const wellKnown: IClientWellKnown = {
             "io.element.voip": {
                 disable_fallback_ice: true,
             },

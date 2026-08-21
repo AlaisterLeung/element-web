@@ -235,6 +235,13 @@ export interface IRoomState {
     showApps: boolean;
     isPeeking: boolean;
     showRightPanel: boolean;
+    // Overlay right-panel flag, consumed by MainSplit (width is remembered in localStorage)
+    overlayEnabled: boolean;
+    // Open state drives the panel slide; kept distinct from showRightPanel so the
+    // closing slide can play after the panel is no longer shown.
+    overlayOpen: boolean;
+    // Whether the slide transition is enabled (Labs animation setting).
+    overlayAnimate: boolean;
     // error object, as from the matrix client/server API
     // If we failed to load information about the room,
     // store the error here.
@@ -477,6 +484,9 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
             showApps: false,
             isPeeking: false,
             showRightPanel: false,
+            overlayEnabled: SettingsStore.getValue("feature_overlay_right_panel") ?? false,
+            overlayAnimate: SettingsStore.getValue("overlayRightPanelAnimation") ?? true,
+            overlayOpen: false,
             joining: false,
             showTopUnreadMessagesBar: false,
             statusBarVisible: false,
@@ -657,6 +667,10 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
             mainSplitContentType: room ? this.getMainSplitContentType(room) : undefined,
             initialEventId: undefined, // default to clearing this, will get set later in the method if needed
             showRightPanel: roomId ? this.context.rightPanelStore.isOpenForRoom(roomId) : false,
+            // Keep the overlay slide-state in sync with the docked open-state so a
+            // panel left open (persisted per-room in the store) re-opens overlaid
+            // when the RoomView (re)initialises for this room.
+            overlayOpen: roomId ? this.context.rightPanelStore.isOpenForRoom(roomId) : false,
             promptAskToJoin: promptAskToJoin,
             viewRoomOpts: viewRoomOpts,
         };
@@ -671,6 +685,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
             this.context.rightPanelStore.setCard({ phase: RightPanelPhases.RoomSummary });
             this.context.rightPanelStore.togglePanel(this.state.roomId ?? null);
             newState.showRightPanel = false;
+            newState.overlayOpen = false;
         }
 
         const initialEventId = this.roomViewStore.getInitialEventId() ?? this.state.initialEventId;
@@ -985,6 +1000,12 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
         this.context.resizeNotifier.on("isResizing", this.onIsResizing);
 
         this.settingWatchers = [
+            SettingsStore.watchSetting("feature_overlay_right_panel", null, (...[, , , value]) =>
+                this.setState({ overlayEnabled: value!, overlayOpen: value! && this.state.showRightPanel }),
+            ),
+            SettingsStore.watchSetting("overlayRightPanelAnimation", null, (...[, , , value]) =>
+                this.setState({ overlayAnimate: value! }),
+            ),
             SettingsStore.watchSetting("layout", null, (...[, , , value]) => this.setState({ layout: value! })),
             SettingsStore.watchSetting("lowBandwidth", null, (...[, , , value]) =>
                 this.setState({ lowBandwidth: value! }),
@@ -1039,7 +1060,10 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
         return hasPropsDiff || hasStateDiff;
     }
 
-    public componentDidUpdate(): void {
+    public componentDidUpdate(
+        _previousProps: Readonly<IRoomProps>,
+        previousState: Readonly<IRoomState>,
+    ): void {
         // Note: We check the ref here with a flag because componentDidMount, despite
         // documentation, does not define our messagePanel ref. It looks like our spinner
         // in render() prevents the ref from being set on first mount, so we try and
@@ -1049,6 +1073,29 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
             this.setState({
                 atEndOfLiveTimeline: this.messagePanel.isAtEndOfLiveTimeline(),
             });
+        }
+
+        // Overlay right panel a11y: when the overlay opens, move focus into the panel
+        // (the card's close button); when it closes, restore focus to the room view so
+        // keyboard navigation resumes on the timeline. Docked mode is untouched.
+        if (previousState.overlayOpen !== this.state.overlayOpen && this.state.overlayEnabled) {
+            const roomViewNode = this.roomView.current;
+            if (this.state.overlayOpen) {
+                roomViewNode
+                    ?.querySelector<HTMLElement>("#mx_RightPanel [data-testid=\"base-card-close-button\"]")
+                    ?.focus();
+            } else {
+                const active = document.activeElement;
+                if (
+                    roomViewNode &&
+                    active &&
+                    roomViewNode !== active &&
+                    roomViewNode.contains(active) &&
+                    active.closest("#mx_RightPanel")
+                ) {
+                    roomViewNode.focus();
+                }
+            }
         }
     }
 
@@ -1124,9 +1171,12 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
 
     private onRightPanelStoreUpdate = (): void => {
         const { roomId } = this.state;
-        this.setState({
-            showRightPanel: roomId ? this.context.rightPanelStore.isOpenForRoom(roomId) : false,
-        });
+        const open = roomId ? this.context.rightPanelStore.isOpenForRoom(roomId) : false;
+        this.setState({ showRightPanel: open, overlayOpen: open });
+    };
+
+    private onOverlayPanelClose = (): void => {
+        this.context.rightPanelStore.togglePanel(this.state.roomId ?? null);
     };
 
     private onPageUnload = (event: BeforeUnloadEvent): string | undefined => {
@@ -1161,6 +1211,19 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
                 );
                 handled = true;
                 break;
+            }
+        }
+
+        // Escape is an accessibility action (not a room action) — check it separately.
+        if (!handled) {
+            const accessibilityAction = getKeyBindingsManager().getAccessibilityAction(ev);
+            if (accessibilityAction === KeyBindingAction.Escape) {
+                // Overlay right panel behaves like a modal: Esc closes it.
+                // Docked mode keeps upstream behaviour (Esc does nothing there).
+                if (this.state.overlayEnabled && this.state.showRightPanel) {
+                    this.context.rightPanelStore.togglePanel(this.state.roomId ?? null);
+                    handled = true;
+                }
             }
         }
 
@@ -2600,10 +2663,13 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
             );
         }
 
-        const showRightPanel =
-            !this.props.hideRightPanel && !isRoomEncryptionLoading && this.state.room && this.state.showRightPanel;
+        // Overlay mode keeps the panel mounted while closed so the slide-out can play;
+        // docked mode unmounts when hidden so the closed panel can never reserve width.
+        const showOverlayPanel =
+            !this.props.hideRightPanel && !isRoomEncryptionLoading && !!this.state.room &&
+            (this.state.overlayEnabled ? true : this.state.showRightPanel);
 
-        const rightPanel = showRightPanel ? (
+        const rightPanel = showOverlayPanel ? (
             <RightPanel
                 room={this.state.room}
                 resizeNotifier={this.context.resizeNotifier}
@@ -2722,6 +2788,10 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
                             sizeKey={sizeKey}
                             defaultSize={defaultSize}
                             analyticsRoomType={analyticsRoomType}
+                            overlay={this.state.overlayEnabled}
+                            open={this.state.overlayOpen}
+                            animate={this.state.overlayAnimate}
+                            onClose={this.onOverlayPanelClose}
                         >
                             <div
                                 className={mainSplitContentClasses}

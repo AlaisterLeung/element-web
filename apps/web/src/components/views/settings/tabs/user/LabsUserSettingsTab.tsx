@@ -21,6 +21,7 @@ import { EnhancedMap } from "../../../../../utils/maps";
 import { SettingsSection } from "../../shared/SettingsSection";
 import { SettingsSubsection, SettingsSubsectionText } from "../../shared/SettingsSubsection";
 import SettingsTab from "../SettingsTab";
+import { OverlayPanelSettings } from "../../OverlayPanelSettings";
 
 export const showLabsFlags = (): boolean => {
     return SdkConfig.get("show_labs_settings") || SettingsStore.getValue("developerMode");
@@ -123,6 +124,7 @@ export default class LabsUserSettingsTab extends React.Component<EmptyObject> {
                                 )}
                             </SettingsSubsectionText>
                             {labsSections}
+                            <OverlayPanelSettings />
                         </SettingsSection>
                     )}
                 </Form.Root>
