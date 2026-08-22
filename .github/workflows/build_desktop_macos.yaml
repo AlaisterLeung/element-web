@@ -69,7 +69,7 @@ on:
 permissions: {} # No permissions required
 jobs:
     build:
-        name: Build macOS Universal
+        name: Build macOS arm64
         runs-on: macos-26 # M1
         environment: ${{ inputs.sign && 'Desktop Apple' || '' }}
         steps:
@@ -79,7 +79,6 @@ jobs:
 
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
               with:
-                  repository: element-hq/element-web
                   ref: ${{ inputs.ref }}
                   persist-credentials: false
 
@@ -102,7 +101,6 @@ jobs:
                   rustup toolchain install stable --profile minimal --no-self-update
                   rustup default stable
                   rustup target add aarch64-apple-darwin
-                  rustup target add x86_64-apple-darwin
 
             # M1 macos-14 comes without Python preinstalled
             - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
@@ -126,14 +124,14 @@ jobs:
             - name: Build Natives
               if: steps.cache.outputs.cache-hit != 'true'
               working-directory: apps/desktop
-              run: pnpm run build:native:universal
+              run: pnpm run hak --target aarch64-apple-darwin fetchandbuild
 
             # We split these because electron-builder gets upset if we set CSC_LINK even to an empty string
             - name: "[Signed] Build App"
               if: inputs.sign != ''
               working-directory: apps/desktop
               run: |
-                  pnpm run build:universal --publish never -m ${TARGETS}
+                  pnpm run build --publish never --arm64 -m ${TARGETS}
               env:
                   APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
                   APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -158,7 +156,7 @@ jobs:
               if: inputs.sign == ''
               working-directory: apps/desktop
               run: |
-                  pnpm run build:universal --publish never -m ${TARGETS}
+                  pnpm run build --publish never --arm64 -m ${TARGETS}
               env:
                   CSC_IDENTITY_AUTO_DISCOVERY: false
                   VARIANT_PATH: variant.json
@@ -192,15 +190,13 @@ jobs:
                   VERSION: ${{ inputs.version }}
                   BASE_URL: ${{ inputs.base-url }}
 
-            # We exclude mac-universal as the unpacked app takes forever to upload and zip and dmg already contains it
             - name: Upload Artifacts
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
               with:
                   name: ${{ inputs.artifact-prefix }}macos
                   path: |
                       apps/desktop/dist
-                      !apps/desktop/dist/mac-universal/**
-                  retention-days: 1
+                      !apps/desktop/dist/mac-arm64/**
 
             - name: Assert zip is present
               if: contains(inputs.targets, 'zip')
@@ -215,7 +211,7 @@ jobs:
                   test -f ./dist/Element*.dmg
 
     test:
-        name: Test macOS Universal
+        name: Test macOS arm64
         needs: build
         if: inputs.test && contains(inputs.targets, 'dmg')
         uses: ./.github/workflows/build_desktop_test.yaml
