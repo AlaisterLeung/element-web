@@ -171,7 +171,9 @@ export default class MainSplit extends React.Component<IProps> {
         return (
             <div className={splitClassName}>
                 {bodyView}
-                {isOverlay && <div className="mx_RightPanel_scrim" onClick={this.props.onClose} />}
+                {isOverlay && (
+                    <div className="mx_RightPanel_scrim" onClick={this.props.onClose} onKeyDown={this.props.onClose} />
+                )}
                 {children}
             </div>
         );

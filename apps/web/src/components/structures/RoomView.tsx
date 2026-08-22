@@ -1060,10 +1060,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
         return hasPropsDiff || hasStateDiff;
     }
 
-    public componentDidUpdate(
-        _previousProps: Readonly<IRoomProps>,
-        previousState: Readonly<IRoomState>,
-    ): void {
+    public componentDidUpdate(_previousProps: Readonly<IRoomProps>, previousState: Readonly<IRoomState>): void {
         // Note: We check the ref here with a flag because componentDidMount, despite
         // documentation, does not define our messagePanel ref. It looks like our spinner
         // in render() prevents the ref from being set on first mount, so we try and
@@ -1082,7 +1079,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
             const roomViewNode = this.roomView.current;
             if (this.state.overlayOpen) {
                 roomViewNode
-                    ?.querySelector<HTMLElement>("#mx_RightPanel [data-testid=\"base-card-close-button\"]")
+                    ?.querySelector<HTMLElement>('#mx_RightPanel [data-testid="base-card-close-button"]')
                     ?.focus();
             } else {
                 const active = document.activeElement;
@@ -2666,7 +2663,9 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
         // Overlay mode keeps the panel mounted while closed so the slide-out can play;
         // docked mode unmounts when hidden so the closed panel can never reserve width.
         const showOverlayPanel =
-            !this.props.hideRightPanel && !isRoomEncryptionLoading && !!this.state.room &&
+            !this.props.hideRightPanel &&
+            !isRoomEncryptionLoading &&
+            !!this.state.room &&
             (this.state.overlayEnabled ? true : this.state.showRightPanel);
 
         const rightPanel = showOverlayPanel ? (
