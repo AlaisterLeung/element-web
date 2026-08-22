@@ -16,7 +16,7 @@ Builds installable Element Desktop packages from this fork via GitHub Actions
 
 ## Usage
 
-The `.github/workflows/desktop-fork.yaml` dispatcher passes `config: fork` to
+The `.github/workflows/desktop-fork.yaml` dispatcher passes `config: atxoft.com` to
 the shared build pipeline (`build_desktop_prepare.yaml` →
 `build_desktop_{linux,windows,macos}.yaml`). Run it from the Actions tab →
 "Fork desktop packages" → Run workflow.

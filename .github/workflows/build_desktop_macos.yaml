@@ -190,13 +190,20 @@ jobs:
                   VERSION: ${{ inputs.version }}
                   BASE_URL: ${{ inputs.base-url }}
 
-            - name: Upload Artifacts
+            # One artifact per package for easy individual download
+            - name: Upload dmg
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              if: contains(inputs.targets, 'dmg')
               with:
-                  name: ${{ inputs.artifact-prefix }}macos
-                  path: |
-                      apps/desktop/dist
-                      !apps/desktop/dist/mac-arm64/**
+                  name: ${{ inputs.artifact-prefix }}macos-dmg
+                  path: apps/desktop/dist/*.dmg
+
+            - name: Upload zip
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              if: contains(inputs.targets, 'zip')
+              with:
+                  name: ${{ inputs.artifact-prefix }}macos-zip
+                  path: apps/desktop/dist/*-mac.zip
 
             - name: Assert zip is present
               if: contains(inputs.targets, 'zip')
