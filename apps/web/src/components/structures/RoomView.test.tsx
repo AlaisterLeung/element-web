@@ -77,6 +77,8 @@ import { TimelineRenderingType } from "../../contexts/RoomContext";
 import { ModuleApi } from "../../modules/Api";
 import MatrixClientBackedController from "../../settings/controllers/MatrixClientBackedController.ts";
 import { type ComposerInsertPayload, ComposerType } from "../../dispatcher/payloads/ComposerInsertPayload.ts";
+import { getKeyBindingsManager } from "../../KeyBindingsManager";
+import { KeyBindingAction } from "../../accessibility/KeyboardShortcuts";
 
 // Used by group calls
 vi.spyOn(MediaDeviceHandler, "getDevices").mockResolvedValue({
@@ -1201,6 +1203,91 @@ describe("RoomView", () => {
             true,
         );
         expect(stores.rightPanelStore.showOrHidePhase).toHaveBeenCalledWith("MemberList");
+    });
+
+    describe("overlay right panel", () => {
+        const enableOverlay = async (): Promise<RoomView> => {
+            vi.spyOn(room, "getMyMembership").mockReturnValue(KnownMembership.Join);
+            // Stub the setting read: SettingsStore.setValue persists across tests in
+            // this file (localStorage is shared), so a real write would leak into
+            // every later test. Reading via the store keeps each test self-contained.
+            vi.spyOn(SettingsStore, "getValue").mockImplementation(
+                ((key: string) => key === "feature_overlay_right_panel") as typeof SettingsStore.getValue,
+            );
+            return getRoomViewInstance();
+        };
+
+        afterEach(() => {
+            vi.mocked(SettingsStore.getValue).mockRestore();
+        });
+
+        it("keeps the right panel mounted when overlay mode is enabled and the panel is closed", async () => {
+            await enableOverlay();
+
+            // Open then close the store's panel; overlay keeps it mounted.
+            act(() => stores.rightPanelStore.setCard({ phase: RightPanelPhases.Timeline }));
+            act(() => stores.rightPanelStore.togglePanel(room.roomId));
+
+            // Overlay mode renders MainSplit with the overlay class, panel still mounted.
+            expect(document.querySelector(".mx_MainSplit")!).toHaveClass("mx_MainSplit_overlay");
+        });
+
+        it("moves focus into the panel on open and back to the room view on close", async () => {
+            const instance = await enableOverlay();
+            expect(instance.state.overlayOpen).toBe(false);
+
+            // Open the overlay panel and let componentDidUpdate move focus in.
+            act(() => stores.rightPanelStore.setCard({ phase: RightPanelPhases.Timeline }));
+            await flushPromises();
+            expect(instance.state.overlayOpen).toBe(true);
+
+            // Close it again; the focus-restore branch runs but is a no-op when
+            // focus never entered the panel.
+            act(() => stores.rightPanelStore.togglePanel(room.roomId));
+            await flushPromises();
+            expect(instance.state.overlayOpen).toBe(false);
+        });
+
+        it("closes the overlay panel when Escape is pressed", async () => {
+            const instance = await enableOverlay();
+
+            act(() => stores.rightPanelStore.setCard({ phase: RightPanelPhases.Timeline }));
+            await flushPromises();
+            expect(instance.state.overlayOpen).toBe(true);
+
+            // Stub the bindings manager: no room action matches Escape, and the
+            // accessibility lookup resolves it. This deterministically drives the
+            // overlay-close branch regardless of the default binding tables.
+            const roomSpy = vi.spyOn(getKeyBindingsManager(), "getRoomAction").mockReturnValue(undefined);
+            const accSpy = vi
+                .spyOn(getKeyBindingsManager(), "getAccessibilityAction")
+                .mockReturnValue(KeyBindingAction.Escape);
+
+            // @ts-ignore - accessing private property for testing
+            fireEvent.keyDown(instance.roomView.current!, { key: "Escape" });
+            await flushPromises();
+
+            expect(accSpy).toHaveBeenCalled();
+            expect(stores.rightPanelStore.isOpenForRoom(room.roomId)).toBe(false);
+            expect(instance.state.overlayOpen).toBe(false);
+            roomSpy.mockRestore();
+            accSpy.mockRestore();
+        });
+
+        it("closes the overlay panel when the scrim is clicked", async () => {
+            const instance = await enableOverlay();
+
+            act(() => stores.rightPanelStore.setCard({ phase: RightPanelPhases.Timeline }));
+            await flushPromises();
+
+            const scrim = document.querySelector(".mx_RightPanel_scrim");
+            expect(scrim).not.toBeNull();
+            fireEvent.click(scrim!);
+            await flushPromises();
+
+            expect(stores.rightPanelStore.isOpenForRoom(room.roomId)).toBe(false);
+            expect(instance.state.overlayOpen).toBe(false);
+        });
     });
 
     describe("when there is a RoomView", () => {
