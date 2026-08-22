@@ -15,6 +15,13 @@ import { type WebPanelResize } from "@matrix-org/analytics-events/types/typescri
 import { PosthogAnalytics } from "../../PosthogAnalytics.ts";
 import { SDKContext } from "../../contexts/SDKContext.ts";
 
+/**
+ * Default overlay panel width in px when the user hasn't dragged the resize handle.
+ * Boss's spec: hard-code 800px as the default (the % Labs setting is removed); the
+ * width is remembered per-device once the user drags the right-panel border.
+ */
+const OVERLAY_DEFAULT_WIDTH = 800;
+
 interface IProps {
     collapsedRhs?: boolean;
     panel?: JSX.Element;
@@ -32,6 +39,15 @@ interface IProps {
     defaultSize: number;
 
     analyticsRoomType: WebPanelResize["roomType"];
+
+    /** Overlay mode: panel floats over the body instead of docking. */
+    overlay?: boolean;
+    /** Whether the overlay panel is open; drives the slide transition. */
+    open?: boolean;
+    /** Whether the slide transition is enabled; off = instant open/close. */
+    animate?: boolean;
+    /** Close handler for scrim clicks in overlay mode. */
+    onClose?: () => void;
 }
 
 export default class MainSplit extends React.Component<IProps> {
@@ -56,6 +72,11 @@ export default class MainSplit extends React.Component<IProps> {
 
     private get sizeSettingStorageKey(): string {
         let key = "mx_rhs_size";
+        if (this.props.overlay) {
+            // Remember the overlay width independently of the docked panel, so a
+            // dragged overlay width never leaks into docked mode (and vice versa).
+            key += "_overlay";
+        }
         if (!!this.props.sizeKey) {
             key += `_${this.props.sizeKey}`;
         }
@@ -84,7 +105,8 @@ export default class MainSplit extends React.Component<IProps> {
         let rhsSize = parseInt(window.localStorage.getItem(this.sizeSettingStorageKey)!, 10);
 
         if (isNaN(rhsSize)) {
-            rhsSize = this.props.defaultSize;
+            // Overlay defaults to the hard-coded 800px; docked keeps its own default.
+            rhsSize = this.props.overlay ? OVERLAY_DEFAULT_WIDTH : this.props.defaultSize;
         }
 
         return {
@@ -96,8 +118,14 @@ export default class MainSplit extends React.Component<IProps> {
     public render(): React.ReactNode {
         const bodyView = React.Children.only(this.props.children);
         const panelView = this.props.panel;
+        const isOverlay = this.props.overlay && panelView !== undefined;
 
         const hasResizer = !this.props.collapsedRhs && panelView;
+        const transformClass = this.props.animate === false ? " mx_RightPanel_instant" : "";
+        const openClass = this.props.open ? " mx_RightPanel_open" : " mx_RightPanel_closed";
+        const splitClassName = isOverlay
+            ? `mx_MainSplit mx_MainSplit_overlay${openClass}${transformClass}`
+            : "mx_MainSplit";
 
         let children;
         if (hasResizer) {
@@ -106,7 +134,7 @@ export default class MainSplit extends React.Component<IProps> {
                     key={this.props.sizeKey}
                     defaultSize={this.loadSidePanelSize()}
                     minWidth={320}
-                    maxWidth="50%"
+                    maxWidth={this.props.overlay ? "100%" : "50%"}
                     enable={{
                         top: false,
                         right: false,
@@ -121,6 +149,18 @@ export default class MainSplit extends React.Component<IProps> {
                     onResize={this.onResize}
                     onResizeStop={this.onResizeStop}
                     className="mx_RightPanel_ResizeWrapper"
+                    style={
+                        isOverlay
+                            ? {
+                                  // re-resizable forces position:relative inline, which would
+                                  // pull the panel into flex layout; overlay mode pins it absolute.
+                                  position: "absolute" as const,
+                                  top: 0,
+                                  right: 0,
+                                  bottom: 0,
+                              }
+                            : undefined
+                    }
                     handleClasses={{ left: "mx_ResizeHandle--horizontal" }}
                 >
                     {panelView}
@@ -129,8 +169,11 @@ export default class MainSplit extends React.Component<IProps> {
         }
 
         return (
-            <div className="mx_MainSplit">
+            <div className={splitClassName}>
                 {bodyView}
+                {isOverlay && (
+                    <div className="mx_RightPanel_scrim" onClick={this.props.onClose} onKeyDown={this.props.onClose} />
+                )}
                 {children}
             </div>
         );

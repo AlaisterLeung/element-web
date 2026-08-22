@@ -214,6 +214,7 @@ export interface Settings {
     [Features.NotificationSettings2]: IFeature;
     "feature_msc3531_hide_messages_pending_moderation": IFeature;
     "feature_latex_maths": IFeature;
+    "feature_overlay_right_panel": IFeature;
     "feature_wysiwyg_composer": IFeature;
     "feature_mjolnir": IFeature;
     "feature_custom_themes": IFeature;
@@ -243,6 +244,7 @@ export interface Settings {
     "RoomList.backgroundImage": IBaseSetting<string | null>;
     "sendReadReceipts": IBaseSetting<boolean>;
     "fontSizeDelta": IBaseSetting<number>;
+    "overlayRightPanelAnimation": IBaseSetting<boolean>;
     "useCustomFontSize": IBaseSetting<boolean>;
     "MessageComposerInput.suggestEmoji": IBaseSetting<boolean>;
     "MessageComposerInput.showStickersButton": IBaseSetting<boolean>;
@@ -476,6 +478,15 @@ export const SETTINGS: Settings = {
         supportedLevelsAreOrdered: true,
         default: false,
     },
+    "feature_overlay_right_panel": {
+        isFeature: true,
+        labsGroup: LabGroup.Ui,
+        displayName: _td("labs|overlay_right_panel"),
+        description: _td("labs|overlay_right_panel_description"),
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
+        supportedLevelsAreOrdered: true,
+        default: false,
+    },
     "feature_wysiwyg_composer": {
         isFeature: true,
         labsGroup: LabGroup.Messaging,
@@ -661,6 +672,11 @@ export const SETTINGS: Settings = {
         supportedLevels: [SettingLevel.DEVICE],
         default: FontWatcher.DEFAULT_DELTA,
         controller: new FontSizeController(),
+    },
+    "overlayRightPanelAnimation": {
+        displayName: _td("labs|overlay_right_panel_animation"),
+        supportedLevels: [SettingLevel.DEVICE],
+        default: true,
     },
     "useCustomFontSize": {
         displayName: _td("settings|appearance|custom_font_size"),
