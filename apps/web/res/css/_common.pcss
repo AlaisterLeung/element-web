@@ -89,6 +89,11 @@ html {
     overflow: hidden;
     /* Stop similar overscroll bounce in Firefox Nightly for macOS */
     overscroll-behavior: none;
+    /* Belt-and-braces: `hidden` still allows programmatic scrolling (focus()
+       scroll-into-view can shift the whole window sideways when an element is
+       briefly off-screen, e.g. the overlay right panel mid-slide). `clip`
+       forbids scrolling entirely. */
+    overflow-x: clip;
 }
 
 body {

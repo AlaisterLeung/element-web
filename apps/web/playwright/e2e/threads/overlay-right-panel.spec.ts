@@ -57,7 +57,8 @@ test.describe("Overlay right panel", () => {
     });
 
     test("docked mode still reserves width (sanity)", async ({ page, app, user }) => {
-        // Flag untouched → default off → docked behaviour
+        // Disable the flag to test the legacy docked behaviour
+        await app.settings.setValue("feature_overlay_right_panel", null, SettingLevel.DEVICE, false);
         const roomId = await app.client.createRoom({});
         await page.goto("/#/room/" + roomId);
 

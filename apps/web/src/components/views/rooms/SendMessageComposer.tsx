@@ -191,7 +191,7 @@ export class SendMessageComposer extends React.Component<ISendMessageComposerPro
             const partCreator = new CommandPartCreator(this.props.room, this.props.mxClient);
             const parts = this.restoreStoredEditorState(partCreator) || [];
             this.model.reset(parts);
-            this.editorRef.current?.focus();
+            this.editorRef.current?.focus({ preventScroll: true });
         }
     }
 
@@ -293,7 +293,7 @@ export class SendMessageComposer extends React.Component<ISendMessageComposerPro
         });
         if (parts) {
             this.model.reset(parts);
-            this.editorRef.current?.focus();
+            this.editorRef.current?.focus({ preventScroll: true });
         }
         return true;
     }
@@ -428,7 +428,7 @@ export class SendMessageComposer extends React.Component<ISendMessageComposerPro
             // clear composer
             model.reset([]);
             this.editorRef.current?.clearUndoHistory();
-            this.editorRef.current?.focus();
+            this.editorRef.current?.focus({ preventScroll: true });
             this.clearStoredEditorState();
             if (shouldSend && SettingsStore.getValue("scrollToBottomOnMessageSent")) {
                 dis.dispatch({
@@ -567,7 +567,9 @@ export class SendMessageComposer extends React.Component<ISendMessageComposerPro
             case "reply_to_event":
             case Action.FocusSendMessageComposer:
                 if ((payload.context ?? TimelineRenderingType.Room) === this.context.timelineRenderingType) {
-                    this.editorRef.current?.focus();
+                    // preventScroll: the composer can live inside the overlay right panel while it
+                    // is still off-screen mid-slide; a bare focus() would scroll the window sideways.
+                    this.editorRef.current?.focus({ preventScroll: true });
                 }
                 break;
             case Action.ComposerInsert:
@@ -653,7 +655,9 @@ export class SendMessageComposer extends React.Component<ISendMessageComposerPro
     };
 
     private focusComposer = (): void => {
-        this.editorRef.current?.focus();
+        // preventScroll: this composer can live in the overlay right panel while it is
+        // still off-screen mid-slide; a bare focus() would scroll the window sideways.
+        this.editorRef.current?.focus({ preventScroll: true });
     };
 
     public render(): React.ReactNode {

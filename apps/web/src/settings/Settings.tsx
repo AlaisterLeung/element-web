@@ -485,7 +485,7 @@ export const SETTINGS: Settings = {
         description: _td("labs|overlay_right_panel_description"),
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
-        default: false,
+        default: true,
     },
     "feature_wysiwyg_composer": {
         isFeature: true,
