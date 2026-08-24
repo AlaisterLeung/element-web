@@ -16,6 +16,11 @@ Please see LICENSE files in the repository root for full details.
 
     width: 100%;
     height: 100%;
+    /* The overlay right panel slides in from translateX(100%); while mid-slide it
+       briefly extends past the viewport. Without this clip the browser's
+       scroll-into-view on focus can scroll the whole window sideways for the
+       duration of the transition. */
+    overflow-x: clip;
 }
 
 .mx_MatrixToolbar {

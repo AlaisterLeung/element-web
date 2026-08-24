@@ -34,6 +34,13 @@ Please see LICENSE files in the repository root for full details.
 .mx_MainSplit_overlay {
     /* Overlay mode: anchor the absolutely-positioned panel to this container. */
     position: relative;
+
+    /* Clip the panel whenever it sits outside this box (closed state = translateX(100%),
+       or mid-transition). Without this the off-screen panel inflates the document's
+       scrollable overflow, so any focus() landing on it mid-slide auto-scrolls the
+       whole window sideways until the transition ends. `clip` (not `hidden`) avoids
+       creating a scroll container, and overflow-y stays visible. */
+    overflow-x: clip;
 }
 
 .mx_MainSplit_overlay > .mx_RightPanel_ResizeWrapper {

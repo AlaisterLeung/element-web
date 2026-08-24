@@ -27,7 +27,9 @@ export function focusComposer(
     if (renderingType === roomContext.timelineRenderingType) {
         // Immediately set the focus, so if you start typing it
         // will appear in the composer
-        composerElement.current?.focus();
+        // preventScroll: focusing must never let the browser scroll-into-view
+        // (e.g. the overlay right panel is briefly off-screen mid-slide).
+        composerElement.current?.focus({ preventScroll: true });
         // If we call focus immediate, the focus _is_ in the right
         // place, but the cursor is invisible, presumably because
         // some other event is still processing.
@@ -36,7 +38,7 @@ export function focusComposer(
         if (timeoutId.current) {
             clearTimeout(timeoutId.current);
         }
-        timeoutId.current = window.setTimeout(() => composerElement.current?.focus(), 200);
+        timeoutId.current = window.setTimeout(() => composerElement.current?.focus({ preventScroll: true }), 200);
     }
 }
 
@@ -48,7 +50,9 @@ export function setCursorPositionAtTheEnd(element: HTMLElement): void {
     selection.removeAllRanges();
     selection.addRange(range);
 
-    element.focus();
+    // preventScroll: the composer can mount inside the overlay right panel while it is
+    // still off-screen mid-slide; a bare focus() would scroll the whole window sideways.
+    element.focus({ preventScroll: true });
 }
 
 /**

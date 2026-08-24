@@ -776,7 +776,10 @@ export default class BasicMessageEditor extends React.Component<IProps, IState> 
         this.editorRef.current?.addEventListener("input", this.onInput, true);
         this.editorRef.current?.addEventListener("compositionstart", this.onCompositionStart, true);
         this.editorRef.current?.addEventListener("compositionend", this.onCompositionEnd, true);
-        this.editorRef.current?.focus();
+        // preventScroll: this composer can mount inside the overlay right panel while it
+        // is still off-screen mid-slide (translateX(100%)); a bare focus() would let the
+        // browser scroll the whole window sideways to reveal it.
+        this.editorRef.current?.focus({ preventScroll: true });
     }
 
     private getInitialCaretPosition(): DocumentPosition {
@@ -885,8 +888,11 @@ export default class BasicMessageEditor extends React.Component<IProps, IState> 
         );
     }
 
-    public focus(): void {
-        this.editorRef.current?.focus();
+    // Accepts (and defaults to) preventScroll: this composer can live in the overlay
+    // right panel while it is still off-screen mid-slide; a bare focus() would let
+    // the browser scroll the whole window sideways to reveal it.
+    public focus(focusOptions: { preventScroll?: boolean } = {}): void {
+        this.editorRef.current?.focus({ preventScroll: focusOptions.preventScroll ?? true });
     }
 
     public insertMention(userId: string): void {

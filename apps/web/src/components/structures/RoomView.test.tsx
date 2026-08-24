@@ -97,10 +97,16 @@ describe("RoomView", () => {
     // mute some noise
     filterConsole("RVS update", "does not have an m.room.create event", "Current version: 1", "Version capability");
 
-    beforeEach(() => {
+    beforeEach(async () => {
         mockPlatformPeg({ reload: () => {} });
         cli = vi.mocked(stubClient());
         MatrixClientBackedController.matrixClient = cli;
+
+        // The overlay flag now defaults to on; tests in this file assume the legacy
+        // docked behaviour unless they opt in via the "overlay right panel" suite
+        // (which stubs getValue). Write through SettingsStore so its local-storage
+        // cache stays consistent.
+        await SettingsStore.setValue("feature_overlay_right_panel", null, SettingLevel.DEVICE, false);
 
         const roomName = (expect.getState().currentTestName ?? "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
 

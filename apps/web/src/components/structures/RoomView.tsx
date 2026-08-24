@@ -1078,9 +1078,13 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
         if (previousState.overlayOpen !== this.state.overlayOpen && this.state.overlayEnabled) {
             const roomViewNode = this.roomView.current;
             if (this.state.overlayOpen) {
+                // preventScroll: the panel is still at translateX(100%) at this point
+                // (slide-in transition hasn't run). Without it, focusing the close
+                // button makes the browser scroll the whole document sideways to
+                // reveal the off-screen button until the transition ends.
                 roomViewNode
                     ?.querySelector<HTMLElement>('#mx_RightPanel [data-testid="base-card-close-button"]')
-                    ?.focus();
+                    ?.focus({ preventScroll: true });
             } else {
                 const active = document.activeElement;
                 if (

@@ -69,6 +69,10 @@ export const WysiwygComposer = memo(function WysiwygComposer({
         initialContent,
         inputEventProcessor,
         emojiSuggestions,
+        // Disable the library's delayed autoFocus: it fires a bare .focus() 200ms after
+        // mount, which scroll-into-views the composer when the overlay panel is still
+        // off-screen mid-slide. Focus is handled by RoomView/MatrixChat instead.
+        isAutoFocusEnabled: false,
     });
 
     const { isFocused, onFocus } = useIsFocused();
