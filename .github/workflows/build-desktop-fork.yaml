@@ -1,0 +1,90 @@
+# Builds installable Element Desktop packages from this fork.
+#
+# Glue around upstream's reusable desktop pipeline:
+#   webapp (this file) -> build_desktop_prepare -> build_desktop_{windows,macos,linux}
+#
+# Fork-specific notes:
+#   - config: atxoft.com resolves to apps/desktop/atxoft.com/ (build.json + config.json without
+#     update_base_url, so packaged builds never auto-update to official Element).
+#   - version: develop makes prepare skip its release-fetch steps (fork has no
+#     matching GitHub releases).
+#   - Builds are unsigned/ad-hoc (no signing secrets configured); Windows uses
+#     SSL.com sandbox demo credentials, macOS falls back to ad-hoc signing.
+name: Build Desktop Packages (Fork)
+on:
+    workflow_dispatch: {}
+permissions: {}
+env:
+    NX_DEFAULT_OUTPUT_STYLE: stream-without-prefixes
+jobs:
+    webapp:
+        name: Build webapp
+        runs-on: ubuntu-24.04
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  persist-credentials: false
+
+            - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+            - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              with:
+                  cache: pnpm
+                  node-version: lts/*
+
+            - name: Fetch layered build
+              run: ./scripts/layered.sh
+
+            - name: Copy config
+              working-directory: apps/web
+              run: cp element.io/develop/config.json config.json
+
+            - name: Build
+              working-directory: apps/web
+              env:
+                  CI_PACKAGE: true
+              run: VERSION=$(scripts/get-version-from-git.sh) pnpm run build
+
+            - name: Upload Artifact
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              with:
+                  name: webapp-fork
+                  path: apps/web/webapp
+
+    prepare:
+        name: Prepare desktop build
+        needs: webapp
+        permissions:
+            contents: read
+        uses: ./.github/workflows/build_desktop_prepare.yaml
+        with:
+            config: atxoft.com
+            version: develop
+            webapp-artifact: webapp-fork
+
+    windows:
+        name: Windows x64
+        needs: prepare
+        uses: ./.github/workflows/build_desktop_windows.yaml
+        with:
+            arch: x64
+            test: true
+
+    macos:
+        name: macOS arm64
+        needs: prepare
+        uses: ./.github/workflows/build_desktop_macos.yaml
+        with:
+            test: true
+
+    linux:
+        name: Linux amd64
+        needs: prepare
+        uses: ./.github/workflows/build_desktop_linux.yaml
+        with:
+            arch: amd64
+            sqlcipher: static
+            targets: tar.gz deb AppImage
+            test: true
