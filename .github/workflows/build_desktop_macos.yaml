@@ -124,7 +124,18 @@ jobs:
             - name: Build Natives
               if: steps.cache.outputs.cache-hit != 'true'
               working-directory: apps/desktop
+              # Fork: fetchandbuild = check+fetch+build. Must NOT include copyandlink here:
+              # cache-hit runs skip this step entirely, and .hak/hakModules is not part of
+              # upstream's cache contents (it is produced by copyandlink on every build).
               run: pnpm run hak --target aarch64-apple-darwin fetchandbuild
+
+            # Fork: copyandlink (copy+link) stages matrix-seshat/index.node into .hak/hakModules
+            # for electron-builder. Runs on EVERY build (cache hit or not) because the .hak cache
+            # predates copyandlink and would otherwise never gain hakModules. Upstream's universal
+            # build runs the same commands via build:native:universal.
+            - name: Stage natives (copyandlink)
+              working-directory: apps/desktop
+              run: pnpm run hak --target aarch64-apple-darwin copyandlink
 
             # We split these because electron-builder gets upset if we set CSC_LINK even to an empty string
             - name: "[Signed] Build App"
