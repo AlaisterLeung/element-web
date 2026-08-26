@@ -1,0 +1,53 @@
+# Builds the fork's webapp bundle for desktop packaging.
+#
+# Reusable: called by build-publish-desktop-fork.yaml so the webapp job isn't duplicated.
+#
+# Notes:
+#   - layered.sh mirrors CI's install mode (live matrix-js-sdk clone over the lockfile pin).
+#   - config: element.io/develop gives a stock webapp; the desktop variant config
+#     (apps/desktop/atxoft.com/) is injected later by build-desktop-fork-prepare.
+on:
+    workflow_call:
+        inputs:
+            artifact-name:
+                type: string
+                required: false
+                default: "webapp-fork"
+                description: "Name of the uploaded webapp artifact"
+permissions: {}
+jobs:
+    webapp:
+        name: Build webapp
+        runs-on: ubuntu-24.04
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  persist-credentials: false
+
+            - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+            - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              with:
+                  cache: pnpm
+                  node-version: lts/*
+
+            - name: Fetch layered build
+              run: ./scripts/layered.sh
+
+            - name: Copy config
+              working-directory: apps/web
+              run: cp element.io/develop/config.json config.json
+
+            - name: Build
+              working-directory: apps/web
+              env:
+                  CI_PACKAGE: true
+              run: VERSION=$(scripts/get-version-from-git.sh) pnpm run build
+
+            - name: Upload Artifact
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              with:
+                  name: ${{ inputs.artifact-name }}
+                  path: apps/web/webapp

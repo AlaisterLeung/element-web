@@ -1,6 +1,15 @@
 # This workflow relies on actions/cache to store the hak dependency artifacts as they take a long time to build
 # Due to this extra care must be taken to only ever run all build_* scripts against the same branch to ensure
 # the correct cache scoping, and additional care must be taken to not run untrusted actions on the develop branch.
+#
+# Fork copy of build_desktop_macos.yaml — kept in lockstep with upstream except:
+#   - no hardcoded `repository:` in checkout (builds THIS fork)
+#   - arm64-only (no x86_64 leg / universal lipo step)
+#   - extra always-run `hak copyandlink` so matrix-seshat/index.node lands in .hak/hakModules
+#     (upstream gets this via build:native:universal; a bare fetchandbuild never populates it,
+#     and the packaged app would silently lose event indexing → seshat e2e test fails)
+#   - artifacts split per package (dmg / zip+update-manifests), no retention cap
+#   - test leg downloads the dmg artifact (prepare_cmd mounts it)
 on:
     workflow_call:
         secrets:
@@ -79,7 +88,6 @@ jobs:
 
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
               with:
-                  repository: element-hq/element-web
                   ref: ${{ inputs.ref }}
                   persist-credentials: false
 
@@ -126,14 +134,23 @@ jobs:
             - name: Build Natives
               if: steps.cache.outputs.cache-hit != 'true'
               working-directory: apps/desktop
-              run: pnpm run build:native:universal
+              # Fork (arm64-only): upstream runs build:native:universal which fetches+builds
+              # both arches then copyandlink. We only need the arm64 leg.
+              run: pnpm run hak --target aarch64-apple-darwin fetchandbuild
+
+            # Fork: copyandlink stages matrix-seshat/index.node into .hak/hakModules for
+            # electron-builder. Runs on EVERY build (cache hit or not): the .hak cache
+            # predates copyandlink, so a cache-hit run would otherwise ship without natives.
+            - name: Stage natives (copyandlink)
+              working-directory: apps/desktop
+              run: pnpm run hak --target aarch64-apple-darwin copyandlink
 
             # We split these because electron-builder gets upset if we set CSC_LINK even to an empty string
             - name: "[Signed] Build App"
               if: inputs.sign != ''
               working-directory: apps/desktop
               run: |
-                  pnpm run build:universal --publish never -m ${TARGETS}
+                  pnpm run build --publish never --arm64 -m ${TARGETS}
               env:
                   APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
                   APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -158,7 +175,7 @@ jobs:
               if: inputs.sign == ''
               working-directory: apps/desktop
               run: |
-                  pnpm run build:universal --publish never -m ${TARGETS}
+                  pnpm run build --publish never --arm64 -m ${TARGETS}
               env:
                   CSC_IDENTITY_AUTO_DISCOVERY: false
                   VARIANT_PATH: variant.json
@@ -192,15 +209,25 @@ jobs:
                   VERSION: ${{ inputs.version }}
                   BASE_URL: ${{ inputs.base-url }}
 
-            # We exclude mac-universal as the unpacked app takes forever to upload and zip and dmg already contains it
-            - name: Upload Artifacts
+            # Fork: one artifact per downloadable package for easy individual download
+            - name: Upload dmg
+              if: contains(inputs.targets, 'dmg')
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
               with:
-                  name: ${{ inputs.artifact-prefix }}macos
+                  name: ${{ inputs.artifact-prefix }}macos-dmg
+                  path: apps/desktop/dist/*.dmg
+
+            - name: Upload zip + update manifests
+              if: contains(inputs.targets, 'zip')
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              with:
+                  name: ${{ inputs.artifact-prefix }}macos-zip
+                  # releases.json(-legacy) are the Squirrel.Mac update manifests; they are only
+                  # generated when base-url is passed (deploy builds).
                   path: |
-                      apps/desktop/dist
-                      !apps/desktop/dist/mac-universal/**
-                  retention-days: 1
+                      apps/desktop/dist/*-mac.zip
+                      apps/desktop/dist/releases.json
+                      apps/desktop/dist/releases-legacy.json
 
             - name: Assert zip is present
               if: contains(inputs.targets, 'zip')
@@ -221,7 +248,8 @@ jobs:
         uses: ./.github/workflows/build_desktop_test.yaml
         with:
             project: macos
-            artifact: ${{ inputs.artifact-prefix }}macos
+            # Fork: artifacts are split per package, the DMG is what prepare_cmd mounts.
+            artifact: ${{ inputs.artifact-prefix }}macos-dmg
             runs-on: macos-14
             executable: /Users/runner/Applications/Element*.app/Contents/MacOS/Element*
             # We need to mount the DMG and copy the app to the Applications folder as a mounted DMG is

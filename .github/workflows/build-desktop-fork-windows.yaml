@@ -1,6 +1,12 @@
 # This workflow relies on actions/cache to store the hak dependency artifacts as they take a long time to build
 # Due to this extra care must be taken to only ever run all build_* scripts against the same branch to ensure
 # the correct cache scoping, and additional care must be taken to not run untrusted actions on the develop branch.
+#
+# Fork copy of build_desktop_windows.yaml — kept in lockstep with upstream except:
+#   - no hardcoded `repository:` in checkout (builds THIS fork)
+#   - artifacts split per package (setup exe+RELEASES+nupkg / msi / unpacked-for-testing), no retention cap
+#   - test leg downloads the unpacked app artifact (needed to flip fuses and launch it)
+#   - x64-only matrix (arm64/ia32 entries + their extra_config template dropped)
 
 # Windows GHA runner by default uses the pwsh shell which breaks codeSigningCert in the workflow
 # We always sign using eSignerCKA to ensure it keeps working, but aside from release & nightlies we use demo credentials
@@ -94,17 +100,6 @@ jobs:
                       {
                         "x64": {
                           "target": "x86_64-pc-windows-msvc"
-                        },
-                        "arm64": {
-                          "target": "aarch64-pc-windows-msvc",
-                          "build-args": "--arm64",
-                          "arch": "amd64_arm64"
-                        },
-                        "ia32": {
-                          "target": "i686-pc-windows-msvc",
-                          "build-args": "--ia32",
-                          "arch": "x86",
-                          "extra_config": "{\"user_notice\": {\"title\": \"Your desktop environment is unsupported.\",\"description\": \"Support for 32-bit Windows installations has ended. Transition to the web or mobile app for continued access.\"}}"
                         }
                       }
 
@@ -116,7 +111,6 @@ jobs:
 
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
               with:
-                  repository: element-hq/element-web
                   ref: ${{ inputs.ref }}
                   persist-credentials: false
 
@@ -167,21 +161,6 @@ jobs:
             - name: Install Deps
               working-directory: apps/desktop
               run: "pnpm install --frozen-lockfile --filter element-desktop"
-
-            - name: Insert config snippet
-              if: steps.config.outputs.extra_config != ''
-              working-directory: apps/desktop
-              shell: bash
-              run: |
-                  mkdir config-edit
-                  pnpm asar extract webapp.asar config-edit
-                  cd config-edit
-                  mv config.json old-config.json
-                  echo '${{ steps.config.outputs.extra_config }}' | jq -s '.[0] * .[1]' old-config.json - > config.json
-                  rm old-config.json
-                  cd ..
-                  rm webapp.asar
-                  pnpm asar pack config-edit/ webapp.asar
 
             - name: Set up sqlcipher macros
               if: steps.cache.outputs.cache-hit != 'true' && contains(inputs.arch, 'arm')
@@ -279,13 +258,33 @@ jobs:
                       -Include *.exe, *.msi `
                   | ForEach-Object -Process {. $env:SIGNTOOL_PATH verify /pa $_.FullName; if(!$?) { throw }}
 
-            - name: Upload Artifacts
+            # Fork: one artifact per downloadable package for easy individual download
+            - name: Upload Squirrel installer
+              if: contains(inputs.targets, 'squirrel')
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
               with:
-                  name: ${{ inputs.artifact-prefix }}win-${{ inputs.arch }}
+                  name: ${{ inputs.artifact-prefix }}win-${{ inputs.arch }}-setup
+                  # The nupkg is the actual auto-update payload served next to RELEASES.
                   path: |
-                      apps/desktop/dist
-                  retention-days: 1
+                      apps/desktop/dist/squirrel-windows*/Element Setup*.exe
+                      apps/desktop/dist/squirrel-windows*/RELEASES
+                      apps/desktop/dist/squirrel-windows*/*.nupkg
+
+            - name: Upload MSI
+              if: contains(inputs.targets, 'msi')
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              with:
+                  name: ${{ inputs.artifact-prefix }}win-${{ inputs.arch }}-msi
+                  path: apps/desktop/dist/*.msi
+
+            # Fork: the Playwright test leg needs the unpacked app dir (to flip fuses and
+            # launch it); only produce this extra artifact when tests are enabled.
+            - name: Upload unpacked app for testing
+              if: inputs.test
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              with:
+                  name: ${{ inputs.artifact-prefix }}win-${{ inputs.arch }}-unpacked
+                  path: apps/desktop/dist/win*-unpacked/**
 
             - name: Assert executable is present
               working-directory: apps/desktop
@@ -313,7 +312,9 @@ jobs:
         uses: ./.github/workflows/build_desktop_test.yaml
         with:
             project: win-${{ inputs.arch }}
-            artifact: ${{ inputs.artifact-prefix }}win-${{ inputs.arch }}
+            # Fork: artifacts are split per package; the test leg needs the unpacked app dir
+            # (uploaded above when test is enabled) to flip fuses and launch the binary.
+            artifact: ${{ inputs.artifact-prefix }}win-${{ inputs.arch }}-unpacked
             runs-on: ${{ inputs.test-runs-on || (inputs.arch == 'arm64' && 'windows-11-arm' || 'windows-2022') }}
             executable: ./dist/win*-unpacked/Element*.exe
             blob_report: ${{ inputs.blob_report }}

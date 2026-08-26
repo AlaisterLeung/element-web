@@ -1,4 +1,8 @@
 # This action helps perform common actions before the build_* actions are started in parallel.
+#
+# Fork copy of build_desktop_prepare.yaml — kept in lockstep with upstream except:
+#   - no hardcoded `repository:` in checkout (builds THIS fork)
+#   - no GitHub Environment reference (the fork has no 'packages.element.io' environment)
 on:
     workflow_call:
         inputs:
@@ -46,7 +50,6 @@ permissions: {}
 jobs:
     prepare:
         name: Prepare
-        environment: ${{ inputs.nightly && 'packages.element.io' || '' }}
         runs-on: ubuntu-24.04
         permissions:
             contents: read
@@ -56,7 +59,6 @@ jobs:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
               with:
                   persist-credentials: false
-                  repository: element-hq/element-web
 
             - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
             - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
