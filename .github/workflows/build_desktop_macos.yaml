@@ -203,7 +203,12 @@ jobs:
               if: contains(inputs.targets, 'zip')
               with:
                   name: ${{ inputs.artifact-prefix }}macos-zip
-                  path: apps/desktop/dist/*-mac.zip
+                  # Fork: releases.json(-legacy) are the Squirrel.Mac update manifests;
+                  # they are only generated when base-url is passed (deploy builds).
+                  path: |
+                      apps/desktop/dist/*-mac.zip
+                      apps/desktop/dist/releases.json
+                      apps/desktop/dist/releases-legacy.json
 
             - name: Assert zip is present
               if: contains(inputs.targets, 'zip')
