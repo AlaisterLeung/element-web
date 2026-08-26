@@ -164,8 +164,6 @@ jobs:
                   if [ -d "macos-dmg" ]; then
                       mkdir -p packages.element.io/install/macos
                       mv macos-dmg/*.dmg packages.element.io/install/macos/
-                      ln -s "$(cd packages.element.io/install/macos && find . -type f -iname '*.dmg' -exec basename {} \;)" \
-                          packages.element.io/install/macos/Element.dmg
                   fi
                   if [ -d "macos-zip" ]; then
                       mkdir -p packages.element.io/update/macos
@@ -190,10 +188,12 @@ jobs:
               run: |
                   set -ex
                   cd packages.element.io
-                  # Windows installer gets a stable name so the download link never changes;
-                  # the nupkg keeps its versioned name (RELEASES points at it).
+                  # Installer names are stable so download links never change; the update
+                  # payloads keep versioned names (RELEASES/releases.json point at them).
                   if [ -d install/win32/x64 ]; then mv install/win32/x64/*.exe "install/win32/x64/Element Setup.exe"; fi
-                  if [ -d install/macos ]; then mv install/macos/*.dmg Element.dmg.tmp && mv Element.dmg.tmp install/macos/Element.dmg; fi
+                  if [ -d install/macos ]; then
+                      mv install/macos/*.dmg install/macos/Element.dmg
+                  fi
 
             - name: Stash deployment tree (dry-run)
               if: needs.prepare.outputs.deploy == 'false'
@@ -213,20 +213,3 @@ jobs:
                   R2_URL: ${{ vars.CF_R2_S3_API }}
                   R2_BUCKET: ${{ vars.R2_BUCKET }}
                   DEPLOYMENT_DIR: ${{ needs.prepare.outputs.packages-dir }}
-
-            - name: Deploy manifests at bucket root
-              if: needs.prepare.outputs.deploy == 'true'
-              run: |
-                  # The worker serves <origin>/<key> straight from the bucket root, while
-                  # prepare's nightly-versioning step reads s3://$R2_BUCKET/nightly/... —
-                  # publish both views so clients and CI agree.
-                  set -ex
-                  for dir in install update; do
-                      aws s3 cp --recursive packages.element.io/$dir/ s3://$R2_BUCKET/$dir/ \
-                          --endpoint-url $R2_URL --region auto --checksum-algorithm CRC32
-                  done
-              env:
-                  AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
-                  AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_TOKEN }}
-                  R2_URL: ${{ vars.CF_R2_S3_API }}
-                  R2_BUCKET: ${{ vars.R2_BUCKET }}
