@@ -155,7 +155,7 @@ jobs:
                       mv macos-zip/releases-legacy.json packages.element.io/update/macos/ 2>/dev/null || true
                   fi
 
-                  # Linux: tar.gz download channel only (deb/AppImage remain CI artifacts).
+                  # Linux: tar.gz / deb / AppImage download channel.
                   if [ -d "linux-amd64-tar-gz" ]; then
                       mkdir -p packages.element.io/install/linux/glibc-x86-64
                       mv linux-amd64-tar-gz/*.tar.gz packages.element.io/install/linux/glibc-x86-64/
@@ -163,6 +163,14 @@ jobs:
                           cd packages.element.io/install/linux/glibc-x86-64 &&
                           mv "$(find . -type f -name '*.tar.gz' | sed 's|^\./||')" element-desktop.tar.gz
                       )
+                  fi
+                  if [ -d "linux-amd64-deb" ]; then
+                      mkdir -p packages.element.io/install/linux/glibc-x86-64
+                      mv linux-amd64-deb/*.deb packages.element.io/install/linux/glibc-x86-64/
+                  fi
+                  if [ -d "linux-amd64-appimage" ]; then
+                      mkdir -p packages.element.io/install/linux/glibc-x86-64
+                      mv linux-amd64-appimage/*.AppImage packages.element.io/install/linux/glibc-x86-64/
                   fi
 
                   find packages.element.io -type f | sort
@@ -175,6 +183,10 @@ jobs:
                   # keep their versioned names (RELEASES / releases.json point at them).
                   if [ -d install/win32/x64 ]; then mv install/win32/x64/*.exe "install/win32/x64/Element Setup.exe"; fi
                   if [ -d install/macos ]; then mv install/macos/*.dmg install/macos/Element.dmg; fi
+                  if [ -d install/linux/glibc-x86-64 ]; then
+                      mv install/linux/glibc-x86-64/*.AppImage install/linux/glibc-x86-64/element-desktop.AppImage
+                      mv install/linux/glibc-x86-64/*.deb install/linux/glibc-x86-64/element-desktop.deb
+                  fi
 
             - name: Stash deployment tree (dry-run)
               if: env.PUBLISH == 'false'
