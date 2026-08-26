@@ -224,7 +224,8 @@ jobs:
         uses: ./.github/workflows/build_desktop_test.yaml
         with:
             project: macos
-            artifact: ${{ inputs.artifact-prefix }}macos
+            # Fork: artifacts are split per package, the DMG is what prepare_cmd mounts.
+            artifact: ${{ inputs.artifact-prefix }}macos-dmg
             runs-on: macos-14
             executable: /Users/runner/Applications/Element*.app/Contents/MacOS/Element*
             # We need to mount the DMG and copy the app to the Applications folder as a mounted DMG is

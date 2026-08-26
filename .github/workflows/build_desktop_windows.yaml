@@ -295,6 +295,15 @@ jobs:
                   name: ${{ inputs.artifact-prefix }}win-${{ inputs.arch }}-msi
                   path: apps/desktop/dist/*.msi
 
+            # Fork: the Playwright leg (build_desktop_test.yaml) needs the unpacked app to flip
+            # fuses and launch it; only produce this extra artifact when tests are enabled.
+            - name: Upload unpacked app for testing
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              if: inputs.test
+              with:
+                  name: ${{ inputs.artifact-prefix }}win-${{ inputs.arch }}-unpacked
+                  path: apps/desktop/dist/win*-unpacked/**
+
             - name: Assert executable is present
               working-directory: apps/desktop
               run: |
@@ -321,7 +330,9 @@ jobs:
         uses: ./.github/workflows/build_desktop_test.yaml
         with:
             project: win-${{ inputs.arch }}
-            artifact: ${{ inputs.artifact-prefix }}win-${{ inputs.arch }}
+            # Fork: artifacts are split per package; the test leg needs the unpacked app dir
+            # (uploaded above when test is enabled) to flip fuses and launch the binary.
+            artifact: ${{ inputs.artifact-prefix }}win-${{ inputs.arch }}-unpacked
             runs-on: ${{ inputs.test-runs-on || (inputs.arch == 'arm64' && 'windows-11-arm' || 'windows-2022') }}
             executable: ./dist/win*-unpacked/Element*.exe
             blob_report: ${{ inputs.blob_report }}

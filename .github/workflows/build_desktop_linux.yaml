@@ -268,7 +268,9 @@ jobs:
         uses: ./.github/workflows/build_desktop_test.yaml
         with:
             project: linux-${{ inputs.arch }}-sqlcipher-${{ inputs.sqlcipher }}
-            artifact: ${{ inputs.artifact-prefix }}linux-${{ inputs.arch }}-sqlcipher-${{ inputs.sqlcipher }}
+            # Fork: artifacts are split per package (see "Upload deb" above), so point the
+            # Playwright leg at the deb artifact; prepare_cmd installs it below.
+            artifact: ${{ inputs.artifact-prefix }}linux-${{ inputs.arch }}-deb
             runs-on: ${{ inputs.runs-on || (inputs.arch == 'arm64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04') }}
             executable: /opt/Element*/element-desktop*
             prepare_cmd: |
