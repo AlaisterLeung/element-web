@@ -6,6 +6,7 @@
 #   - no hardcoded `repository:` in checkout (builds THIS fork)
 #   - artifacts split per package (deb / tar.gz / AppImage), no retention cap
 #   - test leg downloads the deb artifact (prepare_cmd installs it)
+#   - no PR-only dockerbuild rebuild flow (changed-files + build-push steps dropped)
 on:
     workflow_call:
         inputs:
@@ -110,7 +111,9 @@ jobs:
               id: cache
               uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
               with:
-                  key: ${{ runner.os }}-${{ github.ref_name }}-${{ inputs.sqlcipher }}-${{ inputs.arch }}-${{ hashFiles('apps/desktop/hakHash', 'apps/desktop/electronVersion', 'apps/desktop/dockerbuild/*') }}
+                  # Fork: no dockerbuild/* in the key (the PR-only dockerbuild rebuild flow
+                  # below is dropped; the pinned HAK_DOCKER_IMAGE is used as-is).
+                  key: ${{ runner.os }}-${{ github.ref_name }}-${{ inputs.sqlcipher }}-${{ inputs.arch }}-${{ hashFiles('apps/desktop/hakHash', 'apps/desktop/electronVersion') }}
                   path: |
                       apps/desktop/.hak
 
@@ -126,25 +129,6 @@ jobs:
             - name: Install Deps
               working-directory: apps/desktop
               run: "pnpm install --frozen-lockfile --filter element-desktop"
-
-            - name: "Get modified files"
-              id: changed_files
-              if: steps.cache.outputs.cache-hit != 'true' && github.event_name == 'pull_request' && github.repository == 'element-hq/element-web'
-              uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47
-              with:
-                  files: |
-                      apps/desktop/dockerbuild/**
-
-            # This allows contributors to test changes to the dockerbuild image within a pull request
-            - name: Build docker image
-              uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-              if: steps.changed_files.outputs.any_modified == 'true' || github.event_name == 'merge_group'
-              with:
-                  file: apps/desktop/dockerbuild/Dockerfile
-                  context: apps/desktop
-                  load: true
-                  platforms: linux/${{ inputs.arch }}
-                  tags: ${{ env.HAK_DOCKER_IMAGE }}
 
             - name: Build Natives
               if: steps.cache.outputs.cache-hit != 'true'
