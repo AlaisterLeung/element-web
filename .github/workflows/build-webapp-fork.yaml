@@ -1,7 +1,6 @@
 # Builds the fork's webapp bundle for desktop packaging.
 #
-# Reusable: called by build-desktop-fork.yaml and build-publish-desktop-fork.yaml so the
-# ~30-line webapp job isn't duplicated per dispatcher.
+# Reusable: called by build-publish-desktop-fork.yaml so the webapp job isn't duplicated.
 #
 # Notes:
 #   - layered.sh mirrors CI's install mode (live matrix-js-sdk clone over the lockfile pin).

@@ -1,0 +1,196 @@
+# Builds AND publishes installable Element Desktop packages from this fork to the
+# auto-update channel on R2 (served at element.atxoft.com by the element-atxoft-updates
+# Cloudflare Worker).
+#
+# Same pipeline as upstream's build_desktop_and_deploy.yaml but
+# around the fork's own reusable copies (webapp -> build-desktop-fork-prepare ->
+# build-desktop-fork-{windows,macos,linux}), plus a publish job that arranges upstream's
+# packages.element.io layout and syncs it to the R2 bucket.
+#
+#   publish=false  -> dry-run: the deployment tree is stashed as an artifact, nothing leaves CI
+#   test=false     -> skip the Playwright-on-installer legs (faster builds)
+#
+# Update channels served (mirroring upstream packages.element.io under nightly/):
+#   Windows: Squirrel.Windows via update/win32/x64/{RELEASES, *.nupkg}  (works unsigned)
+#   macOS:   Squirrel.Mac    via update/macos/{releases.json, *-mac.zip}
+#            NOTE: ad-hoc signed builds cannot apply Squirrel.Mac updates (signature
+#            validation); macOS stays download-only until properly Apple-signed.
+#   Linux:   download-only tar.gz (no delta channel); deb/AppImage remain CI artifacts.
+#
+# Secrets/vars required for publish=true (or scheduled runs):
+#   secrets: CF_R2_ACCESS_KEY_ID, CF_R2_TOKEN  (R2 token with Object Read+Write on the bucket)
+#   vars:    R2_BUCKET, CF_R2_S3_API           (e.g. https://<accountid>.r2.cloudflarestorage.com)
+name: Build & Publish Desktop Packages (Fork)
+on:
+    schedule:
+        - cron: "0 0 * * *"
+    workflow_dispatch:
+        inputs:
+            windows:
+                description: Build Windows
+                required: true
+                type: boolean
+                default: true
+            macos:
+                description: Build macOS
+                required: true
+                type: boolean
+                default: true
+            linux:
+                description: Build Linux
+                required: true
+                type: boolean
+                default: true
+            test:
+                description: Run Playwright tests on packaged apps
+                required: true
+                type: boolean
+                default: false
+            publish:
+                description: Publish to R2 update channel (false = dry-run, stash tree as artifact)
+                required: true
+                type: boolean
+                default: false
+run-name: Element fork desktop${{ inputs.publish == false && ' (dry-run)' || ' + publish' }}
+concurrency: ${{ github.workflow }}
+permissions: {}
+env:
+    NX_DEFAULT_OUTPUT_STYLE: stream-without-prefixes
+jobs:
+    webapp:
+        uses: ./.github/workflows/build-webapp-fork.yaml
+        with:
+            artifact-name: webapp-fork
+
+    prepare:
+        name: Prepare desktop build
+        needs: webapp
+        permissions:
+            contents: read
+        uses: ./.github/workflows/build-desktop-fork-prepare.yaml
+        with:
+            config: atxoft.com
+            version: develop
+            # Nightly versioning reads the latest published versions from the R2 bucket and
+            # increments monotonically, so Squirrel sees each release as newer.
+            nightly: ${{ inputs.publish || github.event_name == 'schedule' }}
+            deploy: false
+            webapp-artifact: webapp-fork
+        secrets:
+            CF_R2_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
+            CF_R2_TOKEN: ${{ secrets.CF_R2_TOKEN }}
+
+    windows:
+        if: github.event_name != 'workflow_dispatch' || inputs.windows
+        needs: prepare
+        name: Windows x64
+        uses: ./.github/workflows/build-desktop-fork-windows.yaml
+        with:
+            arch: x64
+            version: ${{ needs.prepare.outputs.nightly-version }}
+            targets: squirrel msi
+            test: ${{ inputs.test == true }}
+
+    macos:
+        if: github.event_name != 'workflow_dispatch' || inputs.macos
+        needs: prepare
+        name: macOS arm64
+        uses: ./.github/workflows/build-desktop-fork-macos.yaml
+        with:
+            base-url: https://element.atxoft.com/nightly
+            version: ${{ needs.prepare.outputs.nightly-version }}
+            test: ${{ inputs.test == true }}
+
+    linux:
+        if: github.event_name != 'workflow_dispatch' || inputs.linux
+        needs: prepare
+        name: Linux amd64
+        uses: ./.github/workflows/build-desktop-fork-linux.yaml
+        with:
+            arch: amd64
+            sqlcipher: static
+            targets: tar.gz deb AppImage
+            version: ${{ needs.prepare.outputs.nightly-version }}
+            test: ${{ inputs.test == true }}
+
+    publish:
+        name: "Publish (${{ inputs.publish == true || github.event_name == 'schedule' && 'to R2' || 'dry-run' }})"
+        needs:
+            - prepare
+            - windows
+            - macos
+            - linux
+        runs-on: ubuntu-24.04
+        permissions:
+            contents: read
+        if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+        env:
+            PUBLISH: ${{ inputs.publish == true || github.event_name == 'schedule' }}
+        steps:
+            - name: Download artifacts
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+
+            - name: Arrange deployment tree (packages.element.io layout)
+              run: |
+                  set -ex
+
+                  # Windows: Squirrel installer + nupkg feed (fork split-artifact names).
+                  # Artifact paths are preserved, so squirrel-windows*/ still prefixes files.
+                  if [ -d "win-x64-setup" ]; then
+                      mkdir -p packages.element.io/{install,update}/win32/x64
+                      mv win-x64-setup/squirrel-windows*/*.exe packages.element.io/install/win32/x64/
+                      mv win-x64-setup/squirrel-windows*/*.nupkg packages.element.io/update/win32/x64/
+                      mv win-x64-setup/squirrel-windows*/RELEASES packages.element.io/update/win32/x64/
+                  fi
+
+                  # macOS: dmg for download; zip + manifests for the (future) update channel.
+                  if [ -d "macos-dmg" ]; then
+                      mkdir -p packages.element.io/install/macos
+                      mv macos-dmg/*.dmg packages.element.io/install/macos/
+                  fi
+                  if [ -d "macos-zip" ]; then
+                      mkdir -p packages.element.io/update/macos
+                      mv macos-zip/*-mac.zip packages.element.io/update/macos/
+                      mv macos-zip/releases.json packages.element.io/update/macos/ 2>/dev/null || true
+                      mv macos-zip/releases-legacy.json packages.element.io/update/macos/ 2>/dev/null || true
+                  fi
+
+                  # Linux: tar.gz download channel only (deb/AppImage remain CI artifacts).
+                  if [ -d "linux-amd64-tar-gz" ]; then
+                      mkdir -p packages.element.io/install/linux/glibc-x86-64
+                      mv linux-amd64-tar-gz/*.tar.gz packages.element.io/install/linux/glibc-x86-64/
+                      (
+                          cd packages.element.io/install/linux/glibc-x86-64 &&
+                          mv "$(find . -type f -name '*.tar.gz' | sed 's|^\./||')" element-desktop.tar.gz
+                      )
+                  fi
+
+                  find packages.element.io -type f | sort
+
+            - name: "[Nightly] Strip version from installer names"
+              run: |
+                  set -ex
+                  cd packages.element.io
+                  # Installer/download names stay stable so links never change; update payloads
+                  # keep their versioned names (RELEASES / releases.json point at them).
+                  if [ -d install/win32/x64 ]; then mv install/win32/x64/*.exe "install/win32/x64/Element Setup.exe"; fi
+                  if [ -d install/macos ]; then mv install/macos/*.dmg install/macos/Element.dmg; fi
+
+            - name: Stash deployment tree (dry-run)
+              if: env.PUBLISH == 'false'
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              with:
+                  name: packages.element.io-dry-run
+                  path: packages.element.io
+
+            - name: Publish to R2
+              if: env.PUBLISH == 'true'
+              run: |
+                  aws s3 cp --recursive packages.element.io/ s3://$R2_BUCKET/$DEPLOYMENT_DIR \
+                      --endpoint-url $R2_URL --region auto --checksum-algorithm CRC32
+              env:
+                  AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
+                  AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_TOKEN }}
+                  R2_URL: ${{ vars.CF_R2_S3_API }}
+                  R2_BUCKET: ${{ vars.R2_BUCKET }}
+                  DEPLOYMENT_DIR: nightly
