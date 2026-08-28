@@ -1,6 +1,5 @@
-# Builds AND publishes installable Element Desktop packages from this fork to the
-# auto-update channel on R2 (served at element.atxoft.com by the element-atxoft-updates
-# Cloudflare Worker).
+# Build and publish installable Element Desktop packages from this fork to the
+# auto-update channel on R2.
 #
 # Same pipeline as upstream's build_desktop_and_deploy.yaml but
 # around the fork's own reusable copies (webapp -> build-desktop-fork-prepare ->
@@ -17,13 +16,11 @@
 #            validation); macOS stays download-only until properly Apple-signed.
 #   Linux:   download-only tar.gz (no delta channel); deb/AppImage remain CI artifacts.
 #
-# Secrets/vars required for publish=true (or scheduled runs):
+# Secrets/vars required for publish=true:
 #   secrets: CF_R2_ACCESS_KEY_ID, CF_R2_TOKEN  (R2 token with Object Read+Write on the bucket)
 #   vars:    R2_BUCKET, CF_R2_S3_API           (e.g. https://<accountid>.r2.cloudflarestorage.com)
 name: Build & Publish Desktop Packages (Fork)
 on:
-    schedule:
-        - cron: "0 0 * * *"
     workflow_dispatch:
         inputs:
             windows:
@@ -42,16 +39,16 @@ on:
                 type: boolean
                 default: true
             test:
-                description: Run Playwright tests on packaged apps
+                description: Run Playwright tests
                 required: true
                 type: boolean
-                default: false
+                default: true
             publish:
-                description: Publish to R2 update channel (false = dry-run, stash tree as artifact)
+                description: Publish to R2 update channel
                 required: true
                 type: boolean
-                default: false
-run-name: Element fork desktop${{ inputs.publish == false && ' (dry-run)' || ' + publish' }}
+                default: true
+run-name: Build${{ inputs.publish == true && ' & Publish' }} Desktop Packages
 concurrency: ${{ github.workflow }}
 permissions: {}
 env:
@@ -73,7 +70,7 @@ jobs:
             version: develop
             # Nightly versioning reads the latest published versions from the R2 bucket and
             # increments monotonically, so Squirrel sees each release as newer.
-            nightly: ${{ inputs.publish || github.event_name == 'schedule' }}
+            nightly: ${{ inputs.publish }}
             deploy: false
             webapp-artifact: webapp-fork
         secrets:
@@ -81,7 +78,7 @@ jobs:
             CF_R2_TOKEN: ${{ secrets.CF_R2_TOKEN }}
 
     windows:
-        if: github.event_name != 'workflow_dispatch' || inputs.windows
+        if: inputs.windows
         needs: prepare
         name: Windows x64
         uses: ./.github/workflows/build-desktop-fork-windows.yaml
@@ -92,7 +89,7 @@ jobs:
             test: ${{ inputs.test == true }}
 
     macos:
-        if: github.event_name != 'workflow_dispatch' || inputs.macos
+        if: inputs.macos
         needs: prepare
         name: macOS arm64
         uses: ./.github/workflows/build-desktop-fork-macos.yaml
@@ -102,7 +99,7 @@ jobs:
             test: ${{ inputs.test == true }}
 
     linux:
-        if: github.event_name != 'workflow_dispatch' || inputs.linux
+        if: inputs.linux
         needs: prepare
         name: Linux amd64
         uses: ./.github/workflows/build-desktop-fork-linux.yaml
@@ -114,7 +111,7 @@ jobs:
             test: ${{ inputs.test == true }}
 
     publish:
-        name: "Publish (${{ inputs.publish == true || github.event_name == 'schedule' && 'to R2' || 'dry-run' }})"
+        name: "Publish (${{ inputs.publish == true && 'to R2' || 'dry-run' }})"
         needs:
             - prepare
             - windows
@@ -124,8 +121,6 @@ jobs:
         permissions:
             contents: read
         if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
-        env:
-            PUBLISH: ${{ inputs.publish == true || github.event_name == 'schedule' }}
         steps:
             - name: Download artifacts
               uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -189,14 +184,14 @@ jobs:
                   fi
 
             - name: Stash deployment tree (dry-run)
-              if: env.PUBLISH == 'false'
+              if: inputs.publish == false
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
               with:
                   name: packages.element.io-dry-run
                   path: packages.element.io
 
             - name: Publish to R2
-              if: env.PUBLISH == 'true'
+              if: inputs.publish == true
               run: |
                   aws s3 cp --recursive packages.element.io/ s3://$R2_BUCKET/$DEPLOYMENT_DIR \
                       --endpoint-url $R2_URL --region auto --checksum-algorithm CRC32
