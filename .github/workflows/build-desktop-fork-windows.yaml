@@ -7,6 +7,7 @@
 #   - artifacts split per package (setup exe+RELEASES+nupkg / msi / unpacked-for-testing), no retention cap
 #   - test leg downloads the unpacked app artifact (needed to flip fuses and launch it)
 #   - x64-only matrix (arm64/ia32 entries + their extra_config template dropped)
+#   - nightly VERSION uses <package.json version>-nightly<stamp>
 
 # Windows GHA runner by default uses the pwsh shell which breaks codeSigningCert in the workflow
 # We always sign using eSignerCKA to ensure it keeps working, but aside from release & nightlies we use demo credentials
@@ -227,6 +228,12 @@ jobs:
                   INSTALL_DIR: C:\Users\runneradmin\eSignerCKA
                   MASTER_KEY_FILE: C:\Users\runneradmin\eSignerCKA\master.key
 
+            - name: Read package version
+              id: package-version
+              working-directory: apps/desktop
+              shell: bash
+              run: echo "version=$(cat package.json | jq -r .version)" >> "$GITHUB_OUTPUT"
+
             - name: Build App
               working-directory: apps/desktop
               run: pnpm run build --publish never $BUILD_ARGS -w $TARGETS
@@ -235,11 +242,7 @@ jobs:
                   VARIANT_PATH: variant.json
                   # Only set for Nightly builds
                   # The windows packager relies on parsing this as semver, so we have to make it look like one.
-                  # This will give our update packages really stupid names, but we probably can't change that either
-                  # because squirrel windows parses them for the version too. We don't really care: nobody sees them.
-                  # We just give the installer a static name, so you'll just see this in the 'about' dialog.
-                  # Turns out if you use 0.0.0 here it makes Squirrel windows crash, so we use 0.0.1.
-                  VERSION: ${{ inputs.version && format('0.0.1-nightly.{0}', inputs.version) || '' }}
+                  VERSION: ${{ inputs.version && format('{0}-nightly{1}', steps.package-version.outputs.version, inputs.version) || '' }}
                   BUILD_ARGS: ${{ steps.config.outputs.build-args }}
                   TARGETS: ${{ inputs.targets }}
 

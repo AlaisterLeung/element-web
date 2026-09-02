@@ -10,6 +10,7 @@
 #     and the packaged app would silently lose event indexing → seshat e2e test fails)
 #   - artifacts split per package (dmg / zip+update-manifests), no retention cap
 #   - test leg downloads the dmg artifact (prepare_cmd mounts it)
+#   - also applies VERSION so ad-hoc nightlies carry the nightly stamp
 on:
     workflow_call:
         secrets:
@@ -180,6 +181,7 @@ jobs:
                   CSC_IDENTITY_AUTO_DISCOVERY: false
                   VARIANT_PATH: variant.json
                   TARGETS: ${{ inputs.targets }}
+                  VERSION: ${{ inputs.version }}
 
             - name: Generate releases.json
               if: inputs.base-url
