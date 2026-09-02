@@ -228,12 +228,6 @@ jobs:
                   INSTALL_DIR: C:\Users\runneradmin\eSignerCKA
                   MASTER_KEY_FILE: C:\Users\runneradmin\eSignerCKA\master.key
 
-            - name: Read package version
-              id: package-version
-              working-directory: apps/desktop
-              shell: bash
-              run: echo "version=$(cat package.json | jq -r .version)" >> "$GITHUB_OUTPUT"
-
             - name: Build App
               working-directory: apps/desktop
               run: pnpm run build --publish never $BUILD_ARGS -w $TARGETS
@@ -242,7 +236,8 @@ jobs:
                   VARIANT_PATH: variant.json
                   # Only set for Nightly builds
                   # The windows packager relies on parsing this as semver, so we have to make it look like one.
-                  VERSION: ${{ inputs.version && format('{0}-nightly{1}', steps.package-version.outputs.version, inputs.version) || '' }}
+                  # Fork: prepare stage already outputs the full <tag>-nightly.<stamp> string so use it verbatim
+                  VERSION: ${{ inputs.version }}
                   BUILD_ARGS: ${{ steps.config.outputs.build-args }}
                   TARGETS: ${{ inputs.targets }}
 
