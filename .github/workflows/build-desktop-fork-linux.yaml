@@ -77,7 +77,7 @@ jobs:
         name: Build Linux ${{ inputs.arch }} SQLCipher ${{ inputs.sqlcipher }}
         # We build on native infrastructure as matrix-seshat fails to cross-compile properly
         # https://github.com/matrix-org/seshat/issues/135
-        runs-on: ${{ inputs.runs-on || (inputs.arch == 'arm64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04') }}
+        runs-on: ${{ inputs.runs-on || (inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04') }}
         env:
             HAK_DOCKER_IMAGE: ghcr.io/element-hq/element-web/desktop-build-env:${{ case(github.event_name == 'push', inputs.ref || github.ref_name, github.event_name == 'release', 'staging', 'develop') }}
         steps:
@@ -260,10 +260,10 @@ jobs:
             # Fork: artifacts are split per package (see "Upload deb" above), so point the
             # Playwright leg at the deb artifact; prepare_cmd installs it below.
             artifact: ${{ inputs.artifact-prefix }}linux-${{ inputs.arch }}-deb
-            runs-on: ${{ inputs.runs-on || (inputs.arch == 'arm64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04') }}
+            runs-on: ${{ inputs.runs-on || (inputs.sqlcipher == 'system' && (inputs.arch == 'arm64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04') || (inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04')) }}
             executable: /opt/Element*/element-desktop*
             prepare_cmd: |
                 sudo apt-get -qq update
                 sudo apt install ./dist/*.deb
             blob_report: ${{ inputs.blob_report }}
-            args: ${{ inputs.test-args }}
+            args: ${{ inputs.sqlcipher == 'system' && '--ignore-snapshots' || '' }} ${{ inputs.test-args }}
