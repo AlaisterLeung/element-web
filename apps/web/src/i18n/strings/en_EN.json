@@ -1668,6 +1668,7 @@
         "loading_live_location": "Loading live location…",
         "location_not_available": "Location not available",
         "map_feedback": "Map feedback",
+        "map_marker": "Map marker",
         "mapbox_logo": "Mapbox logo",
         "reset_bearing": "Reset bearing to north",
         "share_button": "Share location",
@@ -2654,6 +2655,7 @@
         },
         "inline_url_previews_default": "Enable previews",
         "inline_url_previews_encrypted": "Enable previews in encrypted rooms",
+        "inline_url_previews_encrypted_bundled_only": "Only show bundled previews in encrypted rooms",
         "insert_trailing_colon_mentions": "Insert a trailing colon after user mentions at the start of a message",
         "invite_controls": {
             "default_label": "Allow users to invite you to rooms"
@@ -3376,7 +3378,8 @@
             "voice_call_unsupported": "%(senderName)s placed a voice call. (not supported by this browser)"
         },
         "m.file": {
-            "error_decrypting": "Error decrypting attachment"
+            "error_decrypting": "Error decrypting attachment",
+            "size_unknown": "Size unknown"
         },
         "m.image": {
             "error": "Unable to show image due to error",
@@ -3750,7 +3753,10 @@
             "one_user": "%(displayName)s is typing …",
             "two_users": "%(names)s and %(lastPerson)s are typing …"
         },
-        "undecryptable_tooltip": "This message could not be decrypted"
+        "undecryptable_tooltip": "This message could not be decrypted",
+        "url_preview": {
+            "open_link": "Open link"
+        }
     },
     "truncated_list_n_more": {
         "other": "And %(count)s more..."
